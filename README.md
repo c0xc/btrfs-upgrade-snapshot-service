@@ -131,6 +131,7 @@ which is based above that subvolume, at the top (root root).
 Use the list command to view all snapshots created by this script.
 
 Before restoring an old snapshot, `create` a current one
+(this happens automatically when upgrading, if you've installed the rpm)
 and also make sure you're about to restore the right one.
 It will not discard the currently active root subvolume by default,
 instead it'll save it with a name like `root_rw_DATE`.
