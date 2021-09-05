@@ -25,6 +25,7 @@ run_umount=0
 run_restore=0
 confirm_restore=
 keep_boot_backup=
+discard_mount=0
 arg=()
 while [[ $# -gt 0 ]]; do
     case "$1" in
@@ -39,6 +40,9 @@ while [[ $# -gt 0 ]]; do
             ;;
         --confirm-restore)
             confirm_restore=y
+            ;;
+        --discard-mount)
+            discard_mount=1
             ;;
         check)
             ;;
@@ -73,6 +77,8 @@ elif [[ "${arg[0]}" = "mount" ]]; then
     run_mount=1
 elif [[ "${arg[0]}" = "umount" ]]; then
     run_umount=1
+elif [[ "${arg[0]}" = "restore" ]]; then
+    run_restore=1
 else
     echo "Command not recognized: ${arg[0]}" >&2
     exit 1
@@ -122,15 +128,30 @@ fi
 # Root device like /dev/sda2 (if sda1 is /boot and sda3 /home or whatever)
 root_device=$(echo "$mount_line0" | cut -f1 -d' ') || exit 1
 
-# Prepare mount of / (top level, above root)
+# Path used as root mountpoint for / (top level, above root)
 mount_base=/tmp/.tmp_mnt_root_btrfs
 if [[ -d /run/ ]]; then
     mount_base=/run/.tmp_mnt_root_btrfs
 fi
+root_mount="$mount_base/root"
+
+# Create mountpoint for / (top level, above root)
 if ! [[ -d "$mount_base" ]]; then
     mkdir -m 700 "$mount_base" || exit 1
+else
+    if [[ -e "$root_mount" ]]; then
+        # Temporary mountpoint from previous(?) run found
+        if (( discard_mount )); then
+            umount "$root_mount"
+            rmdir "$root_mount"
+        else
+            date=$(date -r "$mount_base")
+            echo "working directory / mountpoint found, script currently running - or aborted (created $date)" >&2
+            echo "use --discard-mount to reset only if the script isn't running anymore" >&2
+            exit 1
+        fi
+    fi
 fi
-root_mount="$mount_base/root"
 mkdir -m 0 "$root_mount" || exit 1
 
 # Mount helper
@@ -149,12 +170,13 @@ function unmount_root {
     rmdir "$root_mount"
 }
 function finish {
-    echo "finish call"
+    # cleanup routine
     if [[ -n "$FINISH_DELAY" ]]; then
         sleep "$FINISH_DELAY"
     fi
     unmount_root
 }
+#trap finish EXIT INT
 trap finish EXIT
 
 # Check if /home is a (separate) BTRFS volume
@@ -255,31 +277,17 @@ if ((run_snap)); then
     fi
     if ! [ -d "$backup_root" ]; then
         if ! mkdir "$backup_root"; then
-            echo "failed to create backup root: $backup_root" >&2
+            echo "failed to create backup dir: $backup_root" >&2
             exit 1
         fi
     fi
-    backup_dir="$backup_root/$current_date"
-    if [ -d "$backup_dir" ]; then
-        for ((i=2;; i++)); do
-            if ! [ -d "$backup_dir.$i" ]; then
-                # append counter/number as suffix
-                backup_dir="$backup_dir.$i"
-                break
-            fi
-        done
-    fi
-    if ! mkdir "$backup_dir"; then
-        echo "failed to create backup directory: $backup_dir" >&2
-        exit 1
-    fi
-    
+
     # Create backup tarball of /boot on root filesystem
-    boot_backup_file="$backup_dir/boot_${current_date}.tar.gz"
+    boot_backup_file="$backup_root/boot.tar.gz"
     echo "creating backup of /boot in $boot_backup_file"
     (cd / && tar czf "$boot_backup_file" boot)
     if [ $? -ne 0 ]; then
-        echo "failed to create backup of /boot in $backup_dir" >&2
+        echo "failed to create backup of /boot in $backup_root" >&2
         exit 1
     fi
 
@@ -326,10 +334,9 @@ if ((run_snap)); then
     fi
     echo "os snapshot created on $(date)" >>"$snap_vol/INFO"
 
-    # Clean up /boot backup file and directory
+    # Clean up /boot backup file on live filesystem
     if ! (( $keep_boot_backup )); then
         rm -fv "$boot_backup_file"
-        rm -rvf "$backup_dir"
     fi
 
 # LIST
@@ -392,6 +399,72 @@ elif ((run_umount)); then
 # RESTORE
 elif ((run_restore)); then
 
+    if [[ -z "$confirm_restore" ]]; then
+        echo "please --confirm-restore - note that this will overwrite /boot and reset root" >&2
+        exit 1
+    fi
+
+    snap=${arg[1]}
+    if [[ -z "$snap" ]]; then
+        echo "snapshot name not specified" >&2
+        exit 1
+    fi
+    if [[ -z "${snap_map_date["$snap"]}" ]]; then
+        echo "specified snapshot not found: $snap" >&2
+        exit 1
+    fi
+
+    # Find /boot backup
+    boot_backup_file=
+    if [[ -f "$snap_root/$snap/root/var/tmp/backup/boot.tar.gz" ]]; then
+        boot_backup_file="$snap_root/$snap/root/var/tmp/backup/boot.tar.gz"
+    elif [[ -f "$snap_root/$snap/root/boot.tar.gz" ]]; then
+        boot_backup_file="$snap_root/$snap/root/boot.tar.gz"
+    else
+        echo "boot backup tarball not found in snapshot: $snap" >&2
+        exit 1
+    fi
+
+    # Determine new name and path for currently active "root" subvolume
+    renamed_root="$btrfs_root/root_rw_$current_date"
+    if [ -d "$renamed_root" ]; then
+        for ((i=2;; i++)); do
+            if ! [ -d "$renamed_root.$i" ]; then
+                # append counter/number as suffix
+                renamed_root="$renamed_root.$i"
+                break
+            fi
+        done
+    fi
+
+    # Rename current "root" subvolume
+    echo "Saving currently active 'root' subvolume as: ${renamed_root##*/}"
+    if [[ -e "$renamed_root" ]]; then
+        echo "new name for current 'root' already exists (error or race condition?)" >&2
+        exit 1
+    fi
+    mv -vi "$btrfs_root/root" "$renamed_root" || exit $?
+
+    # Clone selected snapshot -> new "root"
+    snap_id=${snap_map_id["$snap"]}
+    snap_src=$snap_root/$snap/root
+    snap_dst=$btrfs_root/root
+    if [[ -e "$snap_dst" ]]; then
+        echo "previously renamed 'root' subvolume already exists (error or race condition?)" >&2
+        exit 1
+    fi
+    echo "Cloning snapshot '$snap' ($snap_id) to be used as new root subvolume..."
+    $BTRFS subvolume snapshot "$snap_src" "$snap_dst" || exit $?
+
+    # Extracting /boot backup into /boot
+    # This would reset the boot configuration and overwrite boot images etc.
+    echo "restoring /boot..."
+    (cd / && tar xf "$boot_backup_file" boot) || exit $?
+
+    # Done, this should be it
+    # We're not setting the default subvolid because the active one is identified by its name "root"
+    echo "DONE! Reboot now for the change to take effect."
+    echo "# reboot"
 
 fi
 

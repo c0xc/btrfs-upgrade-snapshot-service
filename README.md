@@ -1,44 +1,48 @@
-btrfs-snapshot
-==============
+btrfs-upgrade-snapshot
+======================
 
-A simple snapshot rotation script for BTRFS filesystems.
+A bash script for creating and restoring BTRFS snapshots of /,
+made to be run with systemd release upgrades.
 
 
 
 Usage
 -----
 
-    # btrfs-snapshot filesystem name count
+    # btrfs-os-snapshot create
 
-A filesystem snapshot with the specified base name will be created.
-Typical snapshot base names are "hourly", "nightly", "weekly" or "monthly".
-Not more than *count* snapshots are kept.
-Additional snapshots with the same base name are deleted.
-This means that reducing the number of snapshots in the cron job is sufficient,
-they don't have to be deleted manually.
+    # btrfs-os-snapshot list
 
-Example cron jobs:
+    # btrfs-os-snapshot mount NAME
+    # ls -l /mnt/NAME
+    # btrfs-os-snapshot umount NAME
 
-    @hourly         /root/bin/btrfs-snapshot /data/Temp hourly 24
-    @midnight       /root/bin/btrfs-snapshot /data/Temp nightly 31
-    @monthly        /root/bin/btrfs-snapshot /data/Temp monthly 12
-    0 0 * * 1       /root/bin/btrfs-snapshot /data/Temp weekly 4
+    # btrfs-os-snapshot restore NAME
+    # btrfs-os-snapshot restore NAME --confirm-restore
+    # reboot
 
 
 
 Notes
 -----
 
-The snapshot base name may only contain letters, digits and underscores.
+It expects that your operating system, mounted on /, resides
+on a named subvolume, which is typically called "root".
 
-Snapshots are stored in the `.snapshot` directory.
-This directory will be created if it doesn't exist.
+When run, it first creates a tarball of /boot
+and stores it in /var/tmp/backup or /,
+to make it part of the snapshot that's being created next.
+Then, a snapshot of the root subvolume is created under .snapshot,
+which is based above that subvolume, at the top (root root).
 
-This script will use `/sbin/btrfs` if it exists.
-Otherwise, it will look for `btrfs` in the PATH (Debian: `/bin/btrfs`).
-Use the `BTRFS` variable to specify another btrfs-progs binary:
+Use the list command to view all snapshots created by this script.
 
-    BTRFS=/root/bin/btrfs /root/bin/btrfs-snapshot
+Before restoring an old snapshot, `create` a current one
+and also make sure you're about to restore the right one.
+It will not discard the currently active root subvolume by default,
+instead it'll save it with a name like `root_rw_DATE`.
+It will then restore the specified snapshot by cloning it.
+Finally, it'll extract the /boot backup found in that snapshot.
 
 
 
