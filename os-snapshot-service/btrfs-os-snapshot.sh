@@ -347,7 +347,6 @@ elif ((run_list)); then
         echo "no snapshots found"
         exit
     fi
-    echo "snapshots found:"
     for snap in "${old_snaps[@]}"; do
         date_f=${snap_map_date["$snap"]}
         echo "* $snap"

@@ -11,6 +11,9 @@ rpmbuild:
 	cp -rp $(PWD)/$(SPEC) $(PWD)/rpmbuild/SPECS/
 	rpmbuild --define "_topdir $(PWD)/rpmbuild" -bb --clean $(PWD)/rpmbuild/SPECS/$(SPEC)
 
+rpm: rpmbuild
+	ls -lrth $(PWD)/rpmbuild/RPMS/*/*.rpm
+
 clean:
 	rm -rfv $(PWD)/rpmbuild/
 

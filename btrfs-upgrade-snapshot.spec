@@ -21,7 +21,7 @@ Provides btrfs-upgrade-snapshot script.
 mkdir -p $RPM_BUILD_ROOT/etc/systemd/system
 install -m 644 %{_sourcedir}/btrfs-os-snapshot.service $RPM_BUILD_ROOT/etc/systemd/system
 mkdir -p $RPM_BUILD_ROOT/usr/local/sbin
-install -m 755 %{_sourcedir}/btrfs-os-snapshot.sh $RPM_BUILD_ROOT/usr/local/sbin
+install -m 755 %{_sourcedir}/btrfs-os-snapshot.sh $RPM_BUILD_ROOT/usr/local/sbin/btrfs-os-snapshot
 
 %clean
 rm -rfv $RPM_BUILD_ROOT
@@ -37,7 +37,7 @@ systemctl disable btrfs-os-snapshot
 
 %files
 %defattr(0755, root, root, 0755)
-/usr/local/sbin/btrfs-os-snapshot.sh
+/usr/local/sbin/btrfs-os-snapshot
 /etc/systemd/system/btrfs-os-snapshot.service
 %defattr(0600, root, root, 0750)
 %defattr(0600, root, root, 0700)
