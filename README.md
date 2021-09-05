@@ -2,7 +2,7 @@ btrfs-upgrade-snapshot
 ======================
 
 A bash script for creating and restoring BTRFS snapshots of
-your os installation, made to be run with systemd release upgrades.
+your os installation, made to be run with release upgrades.
 
 All you have to do is install this rpm, which automatically
 creates and enables a service that's run before an upgrade is started.
@@ -166,10 +166,18 @@ Example
     VERSION_ID=30
     VERSION_CODENAME=""
 
+For the above example, the [fedora-release-upgrade](https://github.com/c0xc/fedora-release-upgrade-gui) script was used.
+But you may also use the official upgrade tool for your distribution,
+like gnome-software in the case of Fedora.
+
 
 
 Bugs
 ----
+
+This has been written for and tested with Fedora Linux.
+No compatibility check has been included. But it should work
+as long as your distribution uses systemd to initiate and perform the upgrade.
 
 The script can't work with an os installation at the top of the btrfs fs,
 if it's outside of any subvolume. It doesn't do anything with @.
