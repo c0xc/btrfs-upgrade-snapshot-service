@@ -1,0 +1,20 @@
+# btrfs-os-snapshot.sh - PSE - 2021-07-31
+# man systemd.offline-updates
+
+[Unit]
+Description=Create OS snapshot before upgrade [BTRFS]
+ConditionPathExists=/usr/local/sbin/btrfs-os-snapshot.sh
+DefaultDependencies=no
+Requires=sysinit.target
+After=sysinit.target
+After=system-update-pre.target
+Before=system-update.target
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/sbin/btrfs-os-snapshot.sh create
+TimeoutStartSec=0
+
+[Install]
+WantedBy=system-update.target
+
